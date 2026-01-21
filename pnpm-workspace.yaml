@@ -1,0 +1,15 @@
+# PNPM Workspace Configuration
+# Defines which packages are part of this monorepo
+
+packages:
+  # Application packages
+  - "apps/*"
+  
+  # Shared packages (types, schemas, utilities)
+  - "packages/*"
+  
+  # Background workers
+  - "workers/*"
+
+
+

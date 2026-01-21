@@ -1,0 +1,121 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Docker Compose - Local Development Environment
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# This file sets up all the infrastructure services needed for local development:
+# - PostgreSQL (database)
+# - Redis (cache + job queue)
+# - Docker Registry (container images)
+#
+# Usage:
+#   docker-compose up -d        # Start all services
+#   docker-compose down         # Stop all services
+#   docker-compose logs -f      # View logs
+#
+# ═══════════════════════════════════════════════════════════════════════════
+
+version: '3.8'
+
+services:
+  # ─────────────────────────────────────────────────────────────────
+  # PostgreSQL - Primary Database
+  # ─────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: paas-postgres
+    restart: unless-stopped
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: paas_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Initialization scripts
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────────────────────────
+  # Redis - Cache & Job Queue
+  # ─────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: paas-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Enable persistence
+    command: redis-server --appendonly yes
+
+  # ─────────────────────────────────────────────────────────────────
+  # Docker Registry - Local Container Image Storage
+  # ─────────────────────────────────────────────────────────────────
+  registry:
+    image: registry:2
+    container_name: paas-registry
+    restart: unless-stopped
+    ports:
+      - "5001:5000"  # Using 5001 to avoid conflict with other services
+    volumes:
+      - registry_data:/var/lib/registry
+    environment:
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"
+
+  # ─────────────────────────────────────────────────────────────────
+  # Adminer - Database Management UI (Optional)
+  # ─────────────────────────────────────────────────────────────────
+  adminer:
+    image: adminer
+    container_name: paas-adminer
+    restart: unless-stopped
+    ports:
+      - "8083:8080"
+    depends_on:
+      - postgres
+
+  # ─────────────────────────────────────────────────────────────────
+  # Redis Commander - Redis UI (Optional)
+  # ─────────────────────────────────────────────────────────────────
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: paas-redis-commander
+    restart: unless-stopped
+    ports:
+      - "8084:8081"
+    environment:
+      REDIS_HOSTS: local:redis:6379
+    depends_on:
+      - redis
+
+# ─────────────────────────────────────────────────────────────────
+# VOLUMES
+# ─────────────────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+    name: paas-postgres-data
+  redis_data:
+    name: paas-redis-data
+  registry_data:
+    name: paas-registry-data
+
+# ─────────────────────────────────────────────────────────────────
+# NETWORKS
+# ─────────────────────────────────────────────────────────────────
+networks:
+  default:
+    name: paas-network
+
+
+
