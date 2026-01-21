@@ -26,7 +26,6 @@ const envSchema = z.object({
 
   // Database
   DATABASE_URL: z.string().default('postgres://postgres:postgres@localhost:5434/paas_db'),
-  // DATABASE_URL: z.string().default('postgresql://postgres.ofnlkyueruayducsfzgw:PaaS1256supa@aws-1-ap-south-1.pooler.supabase.com:6543/postgres'),
 
   // Redis
   REDIS_URL: z.string().default('redis://localhost:6380'),
