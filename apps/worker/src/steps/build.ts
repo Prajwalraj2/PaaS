@@ -9,14 +9,17 @@
 // - Logs mock build output
 //
 // In REAL MODE:
-// - Uses Nixpacks for automatic builds (if no Dockerfile)
 // - Uses docker build for custom Dockerfiles
+// - Uses Nixpacks for automatic builds (if no Dockerfile) - Phase 1b
 //
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { join } from 'path';
 import type { BuildContext, BuildStep } from '../types';
 import { env } from '../lib/env';
 import { addLog } from '../utils/log-helper';
+import { dockerBuild as runDockerBuild } from '../utils/docker';
+import { logger } from '../lib/logger';
 
 // ─────────────────────────────────────────────────────────────────
 // BUILD STEP
@@ -113,18 +116,49 @@ async function simulateBuild(context: BuildContext): Promise<BuildContext> {
 async function dockerBuild(context: BuildContext): Promise<BuildContext> {
   const { workDir, imageTag, job } = context;
   
+  if (!imageTag) {
+    throw new Error('Image tag not set in context');
+  }
+  
   addLog(context, 'info', 'Using custom Dockerfile...', 'build');
   
-  // In a real implementation, we would:
-  // 1. Run `docker build -t ${imageTag} ${workDir}`
-  // 2. Stream the build output to logs
-  // 3. Handle errors
+  // Determine Dockerfile path
+  const dockerfilePath = job.dockerfilePath 
+    ? join(workDir, job.dockerfilePath) 
+    : join(workDir, 'Dockerfile');
   
-  // For now, throw an error since we're in simulation-only mode
-  throw new Error(
-    'Real Docker build not implemented yet. ' +
-    'Set SIMULATION_MODE=true for development.'
-  );
+  addLog(context, 'info', `Dockerfile: ${dockerfilePath}`, 'build');
+  
+  // Prepare build args from environment variables
+  // Note: For security, we pass non-sensitive build-time vars only
+  // Runtime env vars will be passed to K8s as secrets
+  const buildArgs: Record<string, string> = {};
+  
+  // Add PORT as a build arg if specified
+  if (job.port) {
+    buildArgs['PORT'] = String(job.port);
+  }
+  
+  // Run Docker build
+  const result = await runDockerBuild({
+    context,
+    workDir,
+    imageTag,
+    dockerfilePath: job.dockerfilePath ? dockerfilePath : undefined,
+    buildArgs: Object.keys(buildArgs).length > 0 ? buildArgs : undefined,
+  });
+  
+  if (!result.success) {
+    logger.error({ error: result.error, imageTag }, 'Docker build failed');
+    throw new Error(`Docker build failed: ${result.error}`);
+  }
+  
+  // Store image size if available
+  if (result.imageSizeBytes) {
+    context.imageSizeBytes = result.imageSizeBytes;
+  }
+  
+  return context;
 }
 
 // ─────────────────────────────────────────────────────────────────

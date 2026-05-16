@@ -64,6 +64,9 @@ export interface BuildContext {
   // Generated image tag
   imageTag?: string;
   
+  // Image size in bytes (set after build)
+  imageSizeBytes?: number;
+  
   // Build start time
   startTime: number;
   

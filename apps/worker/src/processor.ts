@@ -98,31 +98,35 @@ async function processJob(job: Job<BuildJobData>): Promise<BuildResult> {
     logs: [], // The logs for the build
   };
 
+
+  // The main try catch block for the build job, it is used to catch any errors that occur during the build process
   try {
-    // Update status to "building"
+    // Update status to "building", it is used to update the status of the build in the database
     await updateBuildStatus(data.deploymentId, 'building', {
       buildStartedAt: new Date(),
     });
-    await updateProjectStatus(data.projectId, 'building');
+    await updateProjectStatus(data.projectId, 'building'); // Update the status of the project in the database
 
-    addLog(context, 'info', '════════════════════════════════════════════');
-    addLog(context, 'info', '🏗️  PaaS BUILD STARTED');
-    addLog(context, 'info', '════════════════════════════════════════════');
-    addLog(context, 'info', '');
-    addLog(context, 'info', `Project: ${data.projectName}`);
-    addLog(context, 'info', `Branch: ${data.gitBranch}`);
-    addLog(context, 'info', `Triggered by: ${data.triggeredBy}`);
-    addLog(context, 'info', '');
+    addLog(context, 'info', '════════════════════════════════════════════'); // Add a log entry to the build context
+    addLog(context, 'info', '🏗️  PaaS BUILD STARTED'); // Add a log entry to the build context
+    addLog(context, 'info', '════════════════════════════════════════════'); // Add a log entry to the build context
+    addLog(context, 'info', ''); // Add a log entry to the build context
+    addLog(context, 'info', `Project: ${data.projectName}`); // Add a log entry to the build context
+    addLog(context, 'info', `Branch: ${data.gitBranch}`); // Add a log entry to the build context
+    addLog(context, 'info', `Triggered by: ${data.triggeredBy}`); // Add a log entry to the build context
+    addLog(context, 'info', ''); // Add a log entry to the build context
 
     // Run each step in the pipeline
-    let currentContext = context;
+    let currentContext = context; // The current context for the build
     
+    // Run each step in the pipeline
     for (const step of BUILD_PIPELINE) {
+      // Get the start time of the step
       const stepStartTime = Date.now();
       
-      logger.info({ step: step.name, deploymentId: data.deploymentId }, `Starting step: ${step.name}`);
+      logger.info({ step: step.name, deploymentId: data.deploymentId }, `Starting step: ${step.name}`); // Log the start of the step
       
-      // Update job progress
+      // Update job progress, it is used to update the progress of the job in the database
       await job.updateProgress({
         step: step.name,
         message: `Running ${step.name}...`,
@@ -147,6 +151,7 @@ async function processJob(job: Job<BuildJobData>): Promise<BuildResult> {
       buildFinishedAt: new Date(),
       buildDurationMs: buildDuration,
       imageTag: currentContext.imageTag,
+      imageSizeBytes: currentContext.imageSizeBytes,
     });
     
     await updateDeployStatus(data.deploymentId, 'deploying', {

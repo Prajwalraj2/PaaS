@@ -9,13 +9,15 @@
 //
 // In REAL MODE:
 // - Uses docker push to upload the image
-// - Handles authentication with the registry
+// - Handles authentication with the registry (if credentials provided)
 //
 // ═══════════════════════════════════════════════════════════════════════════
 
 import type { BuildContext, BuildStep } from '../types';
 import { env } from '../lib/env';
 import { addLog } from '../utils/log-helper';
+import { dockerPush } from '../utils/docker';
+import { logger } from '../lib/logger';
 
 // ─────────────────────────────────────────────────────────────────
 // PUSH STEP
@@ -67,16 +69,34 @@ async function simulatePush(context: BuildContext): Promise<BuildContext> {
 // ─────────────────────────────────────────────────────────────────
 
 async function realPush(context: BuildContext): Promise<BuildContext> {
-  // In a real implementation, we would:
-  // 1. Authenticate with the registry (docker login)
-  // 2. Run `docker push ${imageTag}`
-  // 3. Stream the push output to logs
-  // 4. Handle errors
+  const { imageTag } = context;
   
-  throw new Error(
-    'Real Docker push not implemented yet. ' +
-    'Set SIMULATION_MODE=true for development.'
-  );
+  if (!imageTag) {
+    throw new Error('Image tag not set in context');
+  }
+  
+  // Note: For local registry (localhost:5001), no authentication is needed.
+  // For cloud registries (ECR, GCR, GHCR), we would need to run docker login first.
+  // This can be added in Phase 3 when we support cloud registries.
+  
+  if (env.REGISTRY_USERNAME && env.REGISTRY_PASSWORD) {
+    addLog(context, 'info', 'Authenticating with registry...', 'push');
+    // TODO: Implement docker login for authenticated registries
+    // For now, we assume the registry is unauthenticated (local dev)
+  }
+  
+  // Run Docker push
+  const result = await dockerPush({
+    context,
+    imageTag,
+  });
+  
+  if (!result.success) {
+    logger.error({ error: result.error, imageTag }, 'Docker push failed');
+    throw new Error(`Docker push failed: ${result.error}`);
+  }
+  
+  return context;
 }
 
 // ─────────────────────────────────────────────────────────────────

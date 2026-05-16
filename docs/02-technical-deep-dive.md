@@ -79,16 +79,18 @@
 
 ### Why These Technologies?
 
-| Technology | Why Chosen | Alternatives Considered |
-|------------|------------|------------------------|
-| **Next.js** | SSR, API routes, great DX, ecosystem | Remix, SvelteKit |
-| **Go** | Performance, low memory, K8s native | Node.js, Rust |
-| **PostgreSQL** | ACID, JSON support, reliability | MySQL, CockroachDB |
-| **Redis** | Speed, pub/sub, queues | Valkey, Dragonfly |
-| **Nixpacks** | Fast, reproducible, modern | Buildpacks, Dockerfile-only |
-| **Kubernetes** | Industry standard, ecosystem | Nomad, Docker Swarm |
-| **Traefik** | K8s native, auto-discovery, auto-SSL | Nginx, Kong |
-| **Loki** | Log aggregation, Grafana native | ELK, Splunk |
+
+| Technology     | Why Chosen                           | Alternatives Considered     |
+| -------------- | ------------------------------------ | --------------------------- |
+| **Next.js**    | SSR, API routes, great DX, ecosystem | Remix, SvelteKit            |
+| **Go**         | Performance, low memory, K8s native  | Node.js, Rust               |
+| **PostgreSQL** | ACID, JSON support, reliability      | MySQL, CockroachDB          |
+| **Redis**      | Speed, pub/sub, queues               | Valkey, Dragonfly           |
+| **Nixpacks**   | Fast, reproducible, modern           | Buildpacks, Dockerfile-only |
+| **Kubernetes** | Industry standard, ecosystem         | Nomad, Docker Swarm         |
+| **Traefik**    | K8s native, auto-discovery, auto-SSL | Nginx, Kong                 |
+| **Loki**       | Log aggregation, Grafana native      | ELK, Splunk                 |
+
 
 ---
 
@@ -1152,7 +1154,7 @@ DEPLOY WORKER
     │  STEP 3: WAIT FOR ROLLOUT                                                │
     │  ────────────────────────                                                │
     │  kubectl rollout status deployment/project-abc123 \                      │
-    │    --namespace user-xyz \                                                │
+    │    --namespace user-xyz \                                       n         │
     │    --timeout=300s                                                        │
     │                                                                           │
     │  ─────────────────────────────────────────────────────────────────────── │
@@ -1781,34 +1783,40 @@ paas-platform/
 
 #### Frontend (apps/web)
 
-| File | Purpose |
-|------|---------|
-| `app/(dashboard)/layout.tsx` | Protected dashboard layout with sidebar |
-| `components/ui/*` | shadcn/ui components (Button, Card, etc.) |
-| `hooks/use-projects.ts` | TanStack Query hooks for project data |
-| `lib/api.ts` | API client with auth headers |
-| `stores/auth-store.ts` | Zustand store for auth state |
+
+| File                         | Purpose                                   |
+| ---------------------------- | ----------------------------------------- |
+| `app/(dashboard)/layout.tsx` | Protected dashboard layout with sidebar   |
+| `components/ui/*`            | shadcn/ui components (Button, Card, etc.) |
+| `hooks/use-projects.ts`      | TanStack Query hooks for project data     |
+| `lib/api.ts`                 | API client with auth headers              |
+| `stores/auth-store.ts`       | Zustand store for auth state              |
+
 
 #### Backend (apps/api)
 
-| File | Purpose |
-|------|---------|
-| `src/index.ts` | Entry point, starts Hono server |
-| `src/app.ts` | Hono app with all middleware |
-| `src/routes/*.ts` | Route definitions (like Express Router) |
-| `src/controllers/*.ts` | Business logic handlers |
-| `src/services/*.ts` | External integrations (GitHub, K8s) |
-| `src/db/schema.ts` | Drizzle ORM schema |
-| `src/queue/processors/*.ts` | BullMQ job handlers |
-| `src/middleware/*.ts` | Hono middleware |
+
+| File                        | Purpose                                 |
+| --------------------------- | --------------------------------------- |
+| `src/index.ts`              | Entry point, starts Hono server         |
+| `src/app.ts`                | Hono app with all middleware            |
+| `src/routes/*.ts`           | Route definitions (like Express Router) |
+| `src/controllers/*.ts`      | Business logic handlers                 |
+| `src/services/*.ts`         | External integrations (GitHub, K8s)     |
+| `src/db/schema.ts`          | Drizzle ORM schema                      |
+| `src/queue/processors/*.ts` | BullMQ job handlers                     |
+| `src/middleware/*.ts`       | Hono middleware                         |
+
 
 #### Shared (packages/shared)
 
-| File | Purpose |
-|------|---------|
-| `src/types/*.ts` | TypeScript interfaces shared across apps |
-| `src/schemas/*.ts` | Zod schemas for validation |
-| `src/constants/*.ts` | Shared constants |
+
+| File                 | Purpose                                  |
+| -------------------- | ---------------------------------------- |
+| `src/types/*.ts`     | TypeScript interfaces shared across apps |
+| `src/schemas/*.ts`   | Zod schemas for validation               |
+| `src/constants/*.ts` | Shared constants                         |
+
 
 ---
 
@@ -2414,4 +2422,3 @@ export const authMiddleware = createMiddleware(async (c, next) => {
 
 *Document Version: 1.1*
 *Last Updated: January 2026*
-

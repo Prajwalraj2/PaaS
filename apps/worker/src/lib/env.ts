@@ -27,6 +27,12 @@ config({ path: resolve(__dirname, '../../../../.env') });
 // ENVIRONMENT SCHEMA
 // ─────────────────────────────────────────────────────────────────
 
+// Helper to properly parse boolean strings from .env files
+const booleanString = z
+  .string()
+  .transform((val) => val.toLowerCase() === 'true' || val === '1')
+  .default('false');
+
 const envSchema = z.object({
   // Server
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
@@ -42,12 +48,17 @@ const envSchema = z.object({
   REGISTRY_USERNAME: z.string().optional(),
   REGISTRY_PASSWORD: z.string().optional(),
   
+  // Kubernetes
+  K8S_NAMESPACE: z.string().default('paas-apps'),
+  PLATFORM_DOMAIN: z.string().default('localhost'),
+  
   // Build settings
   BUILD_TIMEOUT_MS: z.coerce.number().default(30 * 60 * 1000), // 30 minutes
   BUILD_WORKSPACE: z.string().default('/tmp/paas-builds'),
   
   // Simulation mode (for development without Docker)
-  SIMULATION_MODE: z.coerce.boolean().default(true),
+  // Note: z.coerce.boolean() doesn't work correctly for "false" string
+  SIMULATION_MODE: booleanString,
   SIMULATION_BUILD_DELAY_MS: z.coerce.number().default(3000), // 3 seconds
   
   // Worker settings

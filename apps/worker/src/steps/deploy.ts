@@ -10,6 +10,7 @@
 //
 // In REAL MODE:
 // - Generates Kubernetes manifests (Deployment, Service, Ingress)
+// - Loads image into Minikube (for local development)
 // - Applies manifests to the cluster
 // - Waits for rollout to complete
 //
@@ -18,6 +19,8 @@
 import type { BuildContext, BuildStep } from '../types';
 import { env } from '../lib/env';
 import { addLog } from '../utils/log-helper';
+import { deployToK8s } from '../utils/k8s';
+import { logger } from '../lib/logger';
 
 // ─────────────────────────────────────────────────────────────────
 // DEPLOY STEP
@@ -96,18 +99,35 @@ async function simulateDeploy(context: BuildContext): Promise<BuildContext> {
 // ─────────────────────────────────────────────────────────────────
 
 async function realDeploy(context: BuildContext): Promise<BuildContext> {
-  // In a real implementation, we would:
-  // 1. Generate Kubernetes manifests using templates
-  // 2. Apply manifests: kubectl apply -f
-  // 3. Wait for rollout: kubectl rollout status
-  // 4. Run health checks
-  // 5. Configure SSL certificate
-  // 6. Update DNS
+  const { job, imageTag } = context;
   
-  throw new Error(
-    'Real Kubernetes deployment not implemented yet. ' +
-    'Set SIMULATION_MODE=true for development.'
-  );
+  if (!imageTag) {
+    throw new Error('Image tag not set in context');
+  }
+  
+  // Prepare environment variables for the deployment
+  const envVars: Record<string, string> = {
+    NODE_ENV: 'production',
+    ...job.envVars,
+  };
+  
+  // Deploy to Kubernetes
+  const result = await deployToK8s({
+    context,
+    projectSlug: job.projectSlug,
+    imageTag,
+    port: job.port || 3000,
+    envVars,
+    namespace: env.K8S_NAMESPACE,
+    replicas: 1,
+  });
+  
+  if (!result.success) {
+    logger.error({ error: result.error, projectSlug: job.projectSlug }, 'Kubernetes deployment failed');
+    throw new Error(`Kubernetes deployment failed: ${result.error}`);
+  }
+  
+  return context;
 }
 
 // ─────────────────────────────────────────────────────────────────
