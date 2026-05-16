@@ -22,7 +22,9 @@
 
 import { HTTPException } from 'hono/http-exception';
 import * as projectService from '../services/projects.service';
+import * as deploymentService from '../services/deployments.service';
 import { logger } from '../lib/logger';
+import { addBuildJob, type BuildJobData } from '../queue';
 
 // ─────────────────────────────────────────────────────────────────
 // TYPES
@@ -308,13 +310,12 @@ export async function deleteProject(projectId: string, userId: string) {
 /**
  * Trigger a new deployment for a project
  * 
- * This creates a deployment record and (in the future) adds
- * a job to the build queue.
+ * This creates a deployment record and adds a job to the build queue.
  */
 export async function triggerDeployment(
   projectId: string,
   userId: string,
-  triggeredBy: string = 'manual'
+  triggeredBy: 'webhook' | 'manual' | 'rollback' | 'cli' = 'manual'
 ) {
   // Verify project exists and belongs to user
   const project = await projectService.getProjectByIdAndUserId(projectId, userId);
@@ -339,8 +340,51 @@ export async function triggerDeployment(
     'Deployment triggered'
   );
   
-  // TODO: Add job to build queue
-  // await buildQueue.add('build', { deploymentId: deployment.id, projectId });
+  // Get environment variables for the build
+  const envVars = await projectService.listEnvVars(projectId);
+  const envVarsMap: Record<string, string> = {};
+  for (const ev of envVars) {
+    envVarsMap[ev.key] = ev.value;
+  }
+  
+  // Add job to build queue
+  try {
+    const jobData: BuildJobData = {
+      deploymentId: deployment.id,
+      projectId: project.id,
+      userId: userId,
+      gitRepoUrl: project.gitRepoUrl,
+      gitBranch: project.gitBranch || 'main',
+      buildCommand: project.buildCommand || undefined,
+      startCommand: project.startCommand || undefined,
+      rootDirectory: project.gitRootDir || undefined,
+      port: project.port || 3000,
+      instanceType: project.instanceType || 'small',
+      envVars: envVarsMap,
+      triggeredBy,
+      projectName: project.name,
+      projectSlug: project.slug,
+    };
+
+    await addBuildJob(jobData);
+    
+    logger.info(
+      { deploymentId: deployment.id, projectId },
+      'Build job added to queue'
+    );
+  } catch (error) {
+    logger.error(
+      { err: error, deploymentId: deployment.id },
+      'Failed to add build job to queue'
+    );
+    
+    // Update deployment status to failed
+    await deploymentService.updateBuildStatus(deployment.id, 'failed');
+    
+    throw new HTTPException(500, {
+      message: 'Failed to queue deployment',
+    });
+  }
   
   return deployment;
 }

@@ -15,10 +15,11 @@
 
 import { eq, and, or } from 'drizzle-orm';
 import { db } from '../db';
-import { projects, deployments } from '../db/schema';
+import { projects, deployments, environmentVariables } from '../db/schema';
 import { logger } from '../lib/logger';
 import type { ParsedPushEvent } from '../lib/github';
 import { normalizeGitHubUrl } from '../lib/github';
+import { addBuildJob, type BuildJobData } from '../queue';
 
 // ─────────────────────────────────────────────────────────────────
 // TYPES
@@ -329,29 +330,83 @@ export interface WebhookEventLog {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// QUEUE INTEGRATION (Future: Add to BullMQ)
+// QUEUE INTEGRATION (BullMQ)
 // ─────────────────────────────────────────────────────────────────
 
 /**
  * Add deployment to the build queue
  * 
- * TODO: Implement when BullMQ is set up
- * For now, just logs that deployment should be queued
+ * This function:
+ * 1. Gets the full project details
+ * 2. Gets environment variables
+ * 3. Creates a build job and adds it to the queue
  */
 export async function queueDeploymentBuild(deployment: WebhookDeployment): Promise<void> {
-  // TODO: Add to BullMQ queue
-  // await buildQueue.add('build', {
-  //   deploymentId: deployment.id,
-  //   projectId: deployment.projectId,
-  // });
-  
-  logger.info(
-    {
+  try {
+    // Get full project details
+    const [project] = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.id, deployment.projectId))
+      .limit(1);
+    
+    if (!project) {
+      logger.error({ deploymentId: deployment.id, projectId: deployment.projectId }, 'Project not found for webhook deployment');
+      return;
+    }
+    
+    // Get environment variables
+    const envVars = await db
+      .select()
+      .from(environmentVariables)
+      .where(eq(environmentVariables.projectId, deployment.projectId));
+    
+    const envVarsMap: Record<string, string> = {};
+    for (const ev of envVars) {
+      envVarsMap[ev.key] = ev.value;
+    }
+    
+    // Create build job data
+    const jobData: BuildJobData = {
       deploymentId: deployment.id,
       projectId: deployment.projectId,
-    },
-    'TODO: Deployment should be added to build queue'
-  );
+      userId: project.userId,
+      gitRepoUrl: project.gitRepoUrl,
+      gitBranch: deployment.gitBranch || project.gitBranch || 'main',
+      gitCommitSha: deployment.gitCommitSha || undefined,
+      buildCommand: project.buildCommand || undefined,
+      startCommand: project.startCommand || undefined,
+      rootDirectory: project.gitRootDir || undefined,
+      port: project.port || 3000,
+      instanceType: project.instanceType || 'small',
+      envVars: envVarsMap,
+      triggeredBy: 'webhook',
+      projectName: project.name,
+      projectSlug: project.slug,
+    };
+    
+    // Add to queue
+    await addBuildJob(jobData);
+    
+    logger.info(
+      {
+        deploymentId: deployment.id,
+        projectId: deployment.projectId,
+        projectSlug: project.slug,
+      },
+      'Deployment added to build queue'
+    );
+  } catch (error) {
+    logger.error(
+      {
+        err: error,
+        deploymentId: deployment.id,
+        projectId: deployment.projectId,
+      },
+      'Failed to queue deployment build'
+    );
+    throw error;
+  }
 }
 
 

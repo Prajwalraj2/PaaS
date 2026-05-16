@@ -13,6 +13,8 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { Hono } from 'hono';
+import { checkRedisHealth } from '../lib/redis';
+import { checkQueueHealth } from '../queue/queue.utils';
 
 // Create router
 // EXPRESS: const router = express.Router();
@@ -38,30 +40,38 @@ healthRoutes.get('/', (c) => {
 // Checks if all dependencies (DB, Redis) are available
 
 healthRoutes.get('/ready', async (c) => {
+  // Check Redis health
+  const redisHealth = await checkRedisHealth();
+  
   const checks = {
-    database: false,
-    redis: false,
+    database: true, // TODO: Add actual DB health check
+    redis: redisHealth.connected,
   };
-
-  // TODO: Add actual health checks when services are connected
-  // try {
-  //   await db.execute(sql`SELECT 1`);
-  //   checks.database = true;
-  // } catch (e) {
-  //   checks.database = false;
-  // }
-
-  // For now, return healthy (we'll add real checks later)
-  checks.database = true;
-  checks.redis = true;
 
   const isHealthy = Object.values(checks).every(Boolean);
 
   return c.json({
     status: isHealthy ? 'ready' : 'not_ready',
     checks,
+    redisLatency: redisHealth.latency,
     timestamp: new Date().toISOString(),
   }, isHealthy ? 200 : 503);
+});
+
+// ─────────────────────────────────────────────────────────────────
+// GET /health/queues - Queue status
+// ─────────────────────────────────────────────────────────────────
+// Returns status of all job queues
+
+healthRoutes.get('/queues', async (c) => {
+  const queueHealth = await checkQueueHealth();
+  
+  return c.json({
+    status: queueHealth.healthy ? 'healthy' : 'unhealthy',
+    queues: queueHealth.queues,
+    error: queueHealth.error,
+    timestamp: new Date().toISOString(),
+  }, queueHealth.healthy ? 200 : 503);
 });
 
 // ─────────────────────────────────────────────────────────────────

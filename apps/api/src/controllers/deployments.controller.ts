@@ -24,6 +24,7 @@ import { HTTPException } from 'hono/http-exception';
 import * as deploymentService from '../services/deployments.service';
 import * as projectService from '../services/projects.service';
 import { logger } from '../lib/logger';
+import { addBuildJob, removeBuildJob, type BuildJobData } from '../queue';
 
 // ─────────────────────────────────────────────────────────────────
 // TYPES
@@ -186,12 +187,14 @@ export async function getBuildLogs(
 
 /**
  * Trigger a new deployment for a project
- * This creates a deployment record and updates project status
+ * This creates a deployment record, updates project status, and adds to build queue
  */
 export async function triggerDeployment(
   projectId: string,
   userId: string,
-  triggeredBy: 'webhook' | 'manual' | 'rollback' | 'cli' = 'manual'
+  triggeredBy: 'webhook' | 'manual' | 'rollback' | 'cli' = 'manual',
+  gitCommitSha?: string,
+  gitCommitMessage?: string
 ) {
   // Verify user owns the project
   const project = await projectService.getProjectByIdAndUserId(projectId, userId);
@@ -203,8 +206,6 @@ export async function triggerDeployment(
   }
 
   // Check if there's already a deployment in progress
-  const currentDeployment = await deploymentService.getCurrentDeployment(projectId);
-  
   // We allow new deployments even if one is in progress
   // The build worker will handle queuing
 
@@ -212,6 +213,8 @@ export async function triggerDeployment(
   const deployment = await deploymentService.createDeployment({
     projectId,
     gitBranch: project.gitBranch,
+    gitCommitSha,
+    gitCommitMessage,
     triggeredBy,
   });
 
@@ -223,15 +226,71 @@ export async function triggerDeployment(
     'Deployment triggered'
   );
 
-  // TODO: Add job to build queue
-  // await buildQueue.add('build', { deploymentId: deployment.id, projectId });
-
   // Add initial log entry
   await deploymentService.addBuildLog(
     deployment.id,
     `Deployment triggered by ${triggeredBy}`,
     'info'
   );
+
+  // Get environment variables for the build (unmasked for build)
+  const envVars = await projectService.listEnvVarsUnmasked(projectId);
+  const envVarsMap: Record<string, string> = {};
+  for (const ev of envVars) {
+    envVarsMap[ev.key] = ev.value;
+  }
+
+  // Add job to build queue
+  try {
+    const jobData: BuildJobData = {
+      deploymentId: deployment.id,
+      projectId: project.id,
+      userId: userId,
+      gitRepoUrl: project.gitRepoUrl,
+      gitBranch: project.gitBranch || 'main',
+      gitCommitSha: gitCommitSha,
+      buildCommand: project.buildCommand || undefined,
+      startCommand: project.startCommand || undefined,
+      rootDirectory: project.gitRootDir || undefined,
+      port: project.port || 3000,
+      instanceType: project.instanceType || 'small',
+      envVars: envVarsMap,
+      triggeredBy,
+      projectName: project.name,
+      projectSlug: project.slug,
+    };
+
+    await addBuildJob(jobData);
+    
+    await deploymentService.addBuildLog(
+      deployment.id,
+      'Build job added to queue',
+      'info'
+    );
+    
+    logger.info(
+      { deploymentId: deployment.id, projectId },
+      'Build job added to queue'
+    );
+  } catch (error) {
+    logger.error(
+      { err: error, deploymentId: deployment.id },
+      'Failed to add build job to queue'
+    );
+    
+    // Update deployment status to failed
+    await deploymentService.updateBuildStatus(deployment.id, 'failed');
+    
+    await deploymentService.addBuildLog(
+      deployment.id,
+      `Failed to queue build job: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      'error'
+    );
+
+    throw new HTTPException(500, {
+      message: 'Failed to queue deployment',
+    });
+  }
 
   return deployment;
 }
@@ -353,6 +412,14 @@ export async function cancelDeployment(
     throw new HTTPException(400, {
       message: 'Cannot cancel this deployment. Only queued or building deployments can be cancelled.',
     });
+  }
+
+  // Try to remove from queue if not yet started
+  try {
+    await removeBuildJob(deploymentId);
+    logger.info({ deploymentId }, 'Removed build job from queue');
+  } catch (error) {
+    logger.debug({ deploymentId }, 'Build job not in queue or already processing');
   }
 
   // Cancel the deployment
