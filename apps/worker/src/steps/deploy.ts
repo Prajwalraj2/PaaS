@@ -127,6 +127,10 @@ async function realDeploy(context: BuildContext): Promise<BuildContext> {
     throw new Error(`Kubernetes deployment failed: ${result.error}`);
   }
   
+  if (result.appUrl) {
+    context.appUrl = result.appUrl;
+  }
+  
   return context;
 }
 

@@ -37,7 +37,23 @@ export interface K8sDeployOptions {
 export interface K8sDeployResult {
   success: boolean;
   appUrl?: string;
+  ingressHost?: string;
   error?: string;
+}
+
+/**
+ * Build the public hostname for a deployed app.
+ * Example: real-node-expressapp-1-kzmy-7.paas.localhost
+ */
+export function buildIngressHost(projectSlug: string): string {
+  return `${projectSlug}.${env.INGRESS_BASE_DOMAIN}`;
+}
+
+/**
+ * Build the full HTTP URL for a deployed app.
+ */
+export function buildAppUrl(projectSlug: string): string {
+  return `http://${buildIngressHost(projectSlug)}`;
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -101,6 +117,31 @@ export async function deployToK8s(options: K8sDeployOptions): Promise<K8sDeployR
     }
     addLog(context, 'info', `  service/${projectSlug} applied`, 'deploy');
 
+    const ingressHost = buildIngressHost(projectSlug);
+    let appUrl = buildAppUrl(projectSlug);
+
+    // Apply Ingress for browser-accessible routing
+    if (env.INGRESS_ENABLED) {
+      addLog(context, 'info', 'Applying Ingress...', 'deploy');
+      addLog(context, 'info', `  Host: ${ingressHost}`, 'deploy');
+
+      const ingressManifest = generateIngressManifest(
+        projectSlug,
+        ingressHost,
+        namespace
+      );
+
+      const ingressResult = await applyManifest(context, ingressManifest);
+      if (!ingressResult.success) {
+        addLog(context, 'warn', `Ingress apply failed: ${ingressResult.error}`, 'deploy');
+        addLog(context, 'warn', 'App is still running — use port-forward to access it', 'deploy');
+      } else {
+        addLog(context, 'info', `  ingress.networking.k8s.io/${projectSlug} applied`, 'deploy');
+      }
+    } else {
+      addLog(context, 'info', 'Ingress disabled (INGRESS_ENABLED=false)', 'deploy');
+    }
+
     // Wait for rollout
     addLog(context, 'info', 'Waiting for deployment rollout...', 'deploy');
     const rolloutResult = await waitForRollout(context, projectSlug, namespace);
@@ -113,9 +154,6 @@ export async function deployToK8s(options: K8sDeployOptions): Promise<K8sDeployR
     const podStatus = await getPodStatus(context, projectSlug, namespace);
     addLog(context, 'info', `  Pods ready: ${podStatus}`, 'deploy');
 
-    // Generate app URL (for local dev, use NodePort or port-forward instruction)
-    const appUrl = `http://${projectSlug}.localhost`;
-
     addLog(context, 'info', '', 'deploy');
     addLog(context, 'info', '════════════════════════════════════════════', 'deploy');
     addLog(context, 'info', '🎉 DEPLOYMENT SUCCESSFUL!', 'deploy');
@@ -124,13 +162,27 @@ export async function deployToK8s(options: K8sDeployOptions): Promise<K8sDeployR
     addLog(context, 'info', `Namespace: ${namespace}`, 'deploy');
     addLog(context, 'info', `Deployment: ${projectSlug}`, 'deploy');
     addLog(context, 'info', `Service: ${projectSlug}`, 'deploy');
+    if (env.INGRESS_ENABLED) {
+      addLog(context, 'info', `Ingress host: ${ingressHost}`, 'deploy');
+    }
     addLog(context, 'info', '', 'deploy');
-    addLog(context, 'info', 'To access your app locally:', 'deploy');
-    addLog(context, 'info', `  kubectl port-forward -n ${namespace} svc/${projectSlug} ${port}:${port}`, 'deploy');
+
+    if (env.INGRESS_ENABLED) {
+      addLog(context, 'info', '🌐 Your app URL:', 'deploy');
+      addLog(context, 'info', `   ${appUrl}`, 'deploy');
+      addLog(context, 'info', '', 'deploy');
+      addLog(context, 'info', 'Local access (one-time setup):', 'deploy');
+      addLog(context, 'info', '   1. Run: minikube tunnel   (keep terminal open)', 'deploy');
+      addLog(context, 'info', `   2. Open: ${appUrl}`, 'deploy');
+      addLog(context, 'info', '', 'deploy');
+    }
+
+    addLog(context, 'info', 'Fallback (port-forward):', 'deploy');
+    addLog(context, 'info', `  kubectl port-forward -n ${namespace} svc/${projectSlug} ${port}:80`, 'deploy');
     addLog(context, 'info', `  Then visit: http://localhost:${port}`, 'deploy');
     addLog(context, 'info', '', 'deploy');
 
-    return { success: true, appUrl };
+    return { success: true, appUrl, ingressHost };
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -474,9 +526,59 @@ function generateServiceManifest(
       ports: [
         {
           name: 'http',
-          port: port,
+          port: 80,
           targetPort: port,
           protocol: 'TCP',
+        },
+      ],
+    },
+  };
+}
+
+/**
+ * Generate a Kubernetes Ingress manifest (nginx ingress controller).
+ */
+function generateIngressManifest(
+  projectSlug: string,
+  host: string,
+  namespace: string
+): object {
+  return {
+    apiVersion: 'networking.k8s.io/v1',
+    kind: 'Ingress',
+    metadata: {
+      name: projectSlug,
+      namespace: namespace,
+      labels: {
+        app: projectSlug,
+        'managed-by': 'paas-platform',
+      },
+      annotations: {
+        'nginx.ingress.kubernetes.io/proxy-read-timeout': '60',
+        'nginx.ingress.kubernetes.io/proxy-send-timeout': '60',
+      },
+    },
+    spec: {
+      ingressClassName: env.INGRESS_CLASS,
+      rules: [
+        {
+          host: host,
+          http: {
+            paths: [
+              {
+                path: '/',
+                pathType: 'Prefix',
+                backend: {
+                  service: {
+                    name: projectSlug,
+                    port: {
+                      number: 80,
+                    },
+                  },
+                },
+              },
+            ],
+          },
         },
       ],
     },

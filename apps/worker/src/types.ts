@@ -67,6 +67,9 @@ export interface BuildContext {
   // Image size in bytes (set after build)
   imageSizeBytes?: number;
   
+  // Public URL after deploy (set in deploy step)
+  appUrl?: string;
+  
   // Build start time
   startTime: number;
   

@@ -33,6 +33,12 @@ const booleanString = z
   .transform((val) => val.toLowerCase() === 'true' || val === '1')
   .default('false');
 
+// Boolean env var that defaults to true when unset
+const booleanStringDefaultTrue = z
+  .string()
+  .optional()
+  .transform((val) => val === undefined || val === '' || val.toLowerCase() === 'true' || val === '1');
+
 const envSchema = z.object({
   // Server
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
@@ -51,6 +57,11 @@ const envSchema = z.object({
   // Kubernetes
   K8S_NAMESPACE: z.string().default('paas-apps'),
   PLATFORM_DOMAIN: z.string().default('localhost'),
+  
+  // Ingress (nginx ingress controller in Minikube)
+  INGRESS_ENABLED: booleanStringDefaultTrue,
+  INGRESS_CLASS: z.string().default('nginx'),
+  INGRESS_BASE_DOMAIN: z.string().default('paas.localhost'),
   
   // Build settings
   BUILD_TIMEOUT_MS: z.coerce.number().default(30 * 60 * 1000), // 30 minutes
