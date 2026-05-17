@@ -36,6 +36,7 @@ const deployments = pgTable('deployments', {
   deployStatus: varchar('deploy_status', { length: 50 }).default('pending'),
   deployStartedAt: timestamp('deploy_started_at'),
   deployFinishedAt: timestamp('deploy_finished_at'),
+  appUrl: varchar('app_url', { length: 500 }),
   isCurrent: boolean('is_current').default(false),
   triggeredBy: varchar('triggered_by', { length: 50 }),
   createdAt: timestamp('created_at').defaultNow(),
@@ -116,11 +117,12 @@ export async function updateDeployStatus(
 }
 
 /**
- * Mark a deployment as current (live)
+ * Mark a deployment as current (live) and store the app URL
  */
 export async function markDeploymentAsCurrent(
   deploymentId: string,
-  projectId: string
+  projectId: string,
+  appUrl?: string
 ): Promise<void> {
   try {
     // First, unmark all current deployments for this project
@@ -134,17 +136,18 @@ export async function markDeploymentAsCurrent(
         )
       );
     
-    // Then mark the specified deployment as current
+    // Then mark the specified deployment as current and store the app URL
     await db
       .update(deployments)
       .set({
         isCurrent: true,
         deployStatus: 'live',
         deployFinishedAt: new Date(),
+        appUrl: appUrl || null,
       })
       .where(eq(deployments.id, deploymentId));
     
-    logger.info({ deploymentId, projectId }, 'Marked deployment as current');
+    logger.info({ deploymentId, projectId, appUrl }, 'Marked deployment as current');
   } catch (error) {
     logger.error({ err: error, deploymentId }, 'Failed to mark deployment as current');
     throw error;

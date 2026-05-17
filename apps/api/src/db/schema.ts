@@ -377,6 +377,9 @@ export const deployments = pgTable('deployments', {
   deployStartedAt: timestamp('deploy_started_at'),
   deployFinishedAt: timestamp('deploy_finished_at'),
   
+  // Public URL where the app is accessible (e.g., http://my-app.paas.localhost)
+  appUrl: varchar('app_url', { length: 500 }),
+  
   // ─────────────────────────────────────────────────────────────────
   // META
   // ─────────────────────────────────────────────────────────────────

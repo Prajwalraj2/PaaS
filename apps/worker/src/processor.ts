@@ -158,8 +158,8 @@ async function processJob(job: Job<BuildJobData>): Promise<BuildResult> {
       deployStartedAt: new Date(),
     });
 
-    // Mark as current deployment
-    await markDeploymentAsCurrent(data.deploymentId, data.projectId);
+    // Mark as current deployment and save the app URL
+    await markDeploymentAsCurrent(data.deploymentId, data.projectId, currentContext.appUrl);
     
     // Update project status to running
     await updateProjectStatus(data.projectId, 'running');

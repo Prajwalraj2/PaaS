@@ -141,6 +141,7 @@ docker run -v <source>:/app -v /var/run/docker.sock:/var/run/docker.sock \
 | 2026-05-16 | Phase 3 plan created |
 | 2026-05-16 | A.1 Ingress ✅ — apps accessible at `http://{slug}.paas.localhost` |
 | 2026-05-17 | A.2 Nixpacks ✅ — CLI-based build, tested successfully with Node.js app |
+| 2026-05-17 | A.3 Store app URL ✅ — `appUrl` column added to deployments, returned in API |
 
 ---
 

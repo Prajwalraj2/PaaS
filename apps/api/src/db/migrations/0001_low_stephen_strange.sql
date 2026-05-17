@@ -1,0 +1,1 @@
+ALTER TABLE "deployments" ADD COLUMN "app_url" varchar(500);
