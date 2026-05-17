@@ -19,6 +19,7 @@ import type { BuildContext, BuildStep } from '../types';
 import { env } from '../lib/env';
 import { addLog } from '../utils/log-helper';
 import { dockerBuild as runDockerBuild } from '../utils/docker';
+import { nixpacksBuild as runNixpacksBuild } from '../utils/nixpacks';
 import { logger } from '../lib/logger';
 
 // ─────────────────────────────────────────────────────────────────
@@ -162,25 +163,69 @@ async function dockerBuild(context: BuildContext): Promise<BuildContext> {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// NIXPACKS BUILD (Automatic)
+// NIXPACKS BUILD (Automatic — no Dockerfile required)
 // ─────────────────────────────────────────────────────────────────
 
 async function nixpacksBuild(context: BuildContext): Promise<BuildContext> {
-  const { workDir, imageTag, appType } = context;
+  const { workDir, imageTag, appType, job } = context;
   
-  addLog(context, 'info', `Using Nixpacks for ${appType?.type} application...`, 'build');
+  if (!imageTag) {
+    throw new Error('Image tag not set in context');
+  }
   
-  // In a real implementation, we would:
-  // 1. Run `nixpacks build ${workDir} --name ${imageTag}`
-  // 2. Stream the build output to logs
-  // 3. Handle errors
+  addLog(context, 'info', `Using Nixpacks for ${appType?.type || 'unknown'} application...`, 'build');
+  addLog(context, 'info', 'Nixpacks will auto-detect language, dependencies, and build steps', 'build');
   
-  // For now, throw an error since we're in simulation-only mode
-  throw new Error(
-    'Real Nixpacks build not implemented yet. ' +
-    'Set SIMULATION_MODE=true for development.'
-  );
+  // Prepare environment variables for build/runtime
+  // These will be baked into the image
+  const envVars: Record<string, string> = {
+    PORT: String(job.port || 3000),
+    NODE_ENV: 'production',
+    ...job.envVars,
+  };
+  
+  // Run Nixpacks build via Docker (no local CLI needed)
+  const result = await runNixpacksBuild({
+    context,
+    workDir,
+    imageTag,
+    envVars,
+    startCommand: job.startCommand,
+    buildCommand: job.buildCommand,
+  });
+  
+  if (!result.success) {
+    logger.error({ error: result.error, imageTag }, 'Nixpacks build failed');
+    throw new Error(`Nixpacks build failed: ${result.error}`);
+  }
+  
+  // Store image size if available
+  if (result.imageSizeBytes) {
+    context.imageSizeBytes = result.imageSizeBytes;
+  }
+  
+  return context;
 }
+
+// ─────────────────────────────────────────────────────────────────
+// OLD NIXPACKS STUB (commented out — replaced by real implementation above)
+// ─────────────────────────────────────────────────────────────────
+// async function nixpacksBuild_OLD(context: BuildContext): Promise<BuildContext> {
+//   const { workDir, imageTag, appType } = context;
+//   
+//   addLog(context, 'info', `Using Nixpacks for ${appType?.type} application...`, 'build');
+//   
+//   // In a real implementation, we would:
+//   // 1. Run `nixpacks build ${workDir} --name ${imageTag}`
+//   // 2. Stream the build output to logs
+//   // 3. Handle errors
+//   
+//   // For now, throw an error since we're in simulation-only mode
+//   throw new Error(
+//     'Real Nixpacks build not implemented yet. ' +
+//     'Set SIMULATION_MODE=true for development.'
+//   );
+// }
 
 // ─────────────────────────────────────────────────────────────────
 // HELPERS

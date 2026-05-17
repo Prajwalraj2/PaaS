@@ -73,15 +73,34 @@ If Ingress fails, deployment still succeeds; logs show `kubectl port-forward` co
 
 **Goal:** Detect Node/Python/etc. and build automatically when no `Dockerfile` exists.
 
-| # | Task | Where |
-|---|------|-------|
-| A.2.1 | Install Nixpacks CLI locally (or use Docker image `ghcr.io/railwayapp/nixpacks`) | docs + machine |
-| A.2.2 | Create `apps/worker/src/utils/nixpacks.ts` | worker |
-| A.2.3 | Implement `nixpacksBuild()` in `steps/build.ts` | worker |
-| A.2.4 | Pass `envVars` as build/runtime env | worker |
-| A.2.5 | Test: repo with only `package.json` (no Dockerfile) | Postman |
+| # | Task | Where | Status |
+|---|------|-------|--------|
+| A.2.1 | Use Docker image `ghcr.io/railwayapp/nixpacks` (no CLI install) | worker | ✅ |
+| A.2.2 | Create `apps/worker/src/utils/nixpacks.ts` | worker | ✅ |
+| A.2.3 | Implement `nixpacksBuild()` in `steps/build.ts` | worker | ✅ |
+| A.2.4 | Pass `envVars` as build/runtime env | worker | ✅ |
+| A.2.5 | Test: repo with only `package.json` (no Dockerfile) | Postman | ✅ |
 
 **Build order (unchanged):** Dockerfile → Nixpacks → error with helpful message.
+
+### How Nixpacks works
+
+Runs via Docker (no local install):
+```
+docker run -v <source>:/app -v /var/run/docker.sock:/var/run/docker.sock \
+  ghcr.io/railwayapp/nixpacks build /app --name <image-tag>
+```
+
+### Testing A.2
+
+1. Pull Nixpacks image (one-time):
+   ```powershell
+   docker pull ghcr.io/railwayapp/nixpacks:latest
+   ```
+
+2. Create a test repo **without Dockerfile** — just `package.json` + `index.js`
+
+3. Create project with that repo URL, deploy, watch logs
 
 ---
 
@@ -120,7 +139,8 @@ If Ingress fails, deployment still succeeds; logs show `kubectl port-forward` co
 | Date | Milestone |
 |------|-----------|
 | 2026-05-16 | Phase 3 plan created |
-| 2026-05-16 | A.1 Ingress — implemented in worker (`utils/k8s.ts`) |
+| 2026-05-16 | A.1 Ingress ✅ — apps accessible at `http://{slug}.paas.localhost` |
+| 2026-05-17 | A.2 Nixpacks ✅ — CLI-based build, tested successfully with Node.js app |
 
 ---
 
